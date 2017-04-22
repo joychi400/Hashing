@@ -1,11 +1,17 @@
-from ExtendibleHashedFile import *
+from LinearlyHashedFile import *
 
-file = ExtendibleHashedFile(512, 100, 10, 'C:/RF/test1')
-file2 = ExtendibleHashedFile(256, 50, 10, 'C:/RF/test2')
+file = LinearlyHashedFile(256, 100, 10, 'C:/RF/test1')
 
 
-file.insert(53, "this is a string in file 1")
-file2.insert(10, "this is a string in file 2")
+for i in range(50, 90):
+	print("n: " + str(file.n) + "   m: " + str(file.m))
+	file.insert(i, str(i) + "th record")
+
+
+for i in range(60, 70):
+	file.update(i, str(i) + "th UPDATED record")
+	
+file.update(88, "i'm sure this wont break")
 
 
 # lst = [12,34,200,255]
