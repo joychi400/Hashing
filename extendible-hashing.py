@@ -1,15 +1,16 @@
 from ExtendibleHashedFile import *
 
-file = ExtendibleHashedFile(256, 100, 10, 'tests/test1')
+file = ExtendibleHashedFile(256, 100, 10, 'test1')
 
 
 for i in range(50, 90):
 	file.insert(i, str(i) + "th record")
-
+	if file.search(i) == None:
+		print("Record " + str(i) + " was not inserted")
 
 for i in range(60, 70):
 	file.update(i, str(i) + "th UPDATED record")
-	
+
 file.update(88, "i'm sure this wont break")
 
 
