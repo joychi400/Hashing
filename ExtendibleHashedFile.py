@@ -84,11 +84,11 @@ class ExtendibleHashedFile:
 					whichBucket  = self.getBucketPointer(record.getHashValue())
 					if whichBucket == self.curr:
 					        origBucketCount +=1
-							if origBucketCount > self.bfr:
-							       print("theres need to be a split")
+						if origBucketCount > self.bfr:
+							print("theres need to be a split")
 					        else:
-								f.seek(self.blockSize*(whichBucket+2) + self.recordSize*(origBucketCount - 1)
-								f.write(record.bytes)
+							f.seek(self.blockSize*(whichBucket+2) + self.recordSize*(origBucketCount - 1)
+							f.write(record.bytes)
 					if whichBucket == self.next:
 						grabbedBucketCount += 1
 						if grabbedBucketCount > self.bfr:
@@ -111,52 +111,89 @@ class ExtendibleHashedFile:
 		return self.Directory[rightmost]
 
     def search(self, value):
-        return self.directory.search(value)
+	#pass value to hash function
+		bucket = self.h1(value)
+	#open the file as binary read and write 
+	with open(self.file, 'rb', buffering=self.blockSize) as f:
+		# navigate to the appropriate bucket
+		# plus 2 is to account for the header
+		f.seek(self.blockSize*(bucket+2))
+		# load bucket into memory
+		theBlock = self.makeBlock(f.read(self.blockSize))	
+		# currently only built to handle key values
+		if theBlock.containsRecordWithValue(value):	
+			theRecord = theBlock.getRecordWithValue(value)	
+			print(theRecord.bytes)
+		else:
+			pointer = theBlock.getPointer() - 1
+			#with open(self.overflow, 'rb' buffering=self.blockSize) as overflow:
+			with open(self.Directory, 'rb' buffering=self.blockSize) as overflow:
+			overflow.seek(self.blockSize*pointer)
+			self.makeBlock(overflow.read(self.blockSize))
+		print(theRecord.bytes)
 
     def update(self, value, data):
-         pass
+         # pass value to hash function
+		bucket = self.h1(value)
+		# format the record to overwrite with
+		formattedRecord = Record.new(self.recordSize, self.fieldSize, value, data)	
+		# open the file as binary read and write
+		with open(self.file, 'r+b', buffering=self.blockSize) as f:
+		# navigate to the appropriate bucket
+		# plus 2 is to account for the header
+		f.seek(self.blockSize*(bucket+2))
+		# load bucket into memory
+		theBlock = self.makeBlock(f.read(self.blockSize))
+		# currently only built to handle key values	
+		recLoc = theBlock.getRecordWithValueLoc(value)
+		# navigate to the record to be updated
+		f.seek(self.blockSize*(bucket+2) + self.recordSize*recLoc)
+		# write over the old record with new formatted one
+		f.write(formattedRecord.bytes)
+			
+	 
 
-    def readBlock(self, blockNum):
-        with open(self.file, 'rb', buffering=self.blockSize) as f:
-            f.seek(self.blockSize*(blockNum+2))
-            return self.makeBlock(f.read(self.blockSize))
+    #def readBlock(self, blockNum):
+        #with open(self.file, 'rb', buffering=self.blockSize) as f:
+           # f.seek(self.blockSize*(blockNum+2))
+            #return self.makeBlock(f.read(self.blockSize))
 
     # TODO: It would be cleaner (and reduce disk accesses) to simply append
     #       records directly to a Block, and then have a single
     #       Block.write method that will write the block back
     #       to disk in a single write operation and only when needed.
-    def appendBlock(self, blockNum, record):
-        with open(self.file, 'r+b', buffering=self.blockSize) as f:
-            f.seek(self.blockSize*(blockNum+2))
-            theBlock = self.makeBlock(f.read(self.blockSize))
+   # def appendBlock(self, blockNum, record):
+       # with open(self.file, 'r+b', buffering=self.blockSize) as f:
+           # f.seek(self.blockSize*(blockNum+2))
+            #theBlock = self.makeBlock(f.read(self.blockSize))
 
             # If record is already in the block, don't re-insert it
-            if theBlock.containsRecordWithValue(record.getHashValue()):
+            #if theBlock.containsRecordWithValue(record.getHashValue()):
                 return True
 
             # Otherwise check for a free slot and use it if there is one
-            space = theBlock.hasSpace();
-            if space>=0:
-                # spot was open, move pointer back
-                f.seek(self.blockSize*(blockNum+2) + self.recordSize*space)
+           # space = theBlock.hasSpace();
+           # if space>=0:
+                ## spot was open, move pointer back
+               # f.seek(self.blockSize*(blockNum+2) + self.recordSize*space)
                 # slot data in there boiii
-                f.write(record.bytes)
+               # f.write(record.bytes)
 
-                return True
-            else:
+               # return True
+            #else:
                 # there has been a collision. handle it.
-                return False
+               # return False
 
     # TODO: Instead of clearing the block with a separate method
     #       it would be nicer to have a "deleted" field on the Record class
     #       so the Record's could be marked for deletion, and written to
     #       disk in a single Block.write call or similar.
-    def clearBlock(self, blockNum):
-        with open(self.file, 'r+b', buffering=self.blockSize) as f:
-            emptyRecord = Record.new(self.recordSize, self.fieldSize, 0, "DELETED")
-            for i in range(0, self.bfr):
-                f.seek(self.blockSize*(blockNum+2) + self.recordSize*i)
-                f.write(emptyRecord.bytes)
+   # def clearBlock(self, blockNum):
+       # with open(self.file, 'r+b', buffering=self.blockSize) as f:
+            #emptyRecord = Record.new(self.recordSize, self.fieldSize, 0, "DELETED")
+            #for i in range(0, self.bfr):
+                #f.seek(self.blockSize*(blockNum+2) + self.recordSize*i)
+                #f.write(emptyRecord.bytes)
 
     def makeBlock(self, data):
-        return ExtendibleBlock(self.size, self.recordSize, self.fieldSize, self.bfr, data)
+        return ExtendibleBlock(self.size, self.recordSize, self.fieldSize, self.bfr, self.data, self.localDepth)
