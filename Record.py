@@ -8,7 +8,7 @@ class Record:
 	
 	@classmethod
 	def new(cls, size, fieldSize, value, record):
-		bytes = value.to_bytes(fieldSize, byteorder='big') + b'' + record.encode('UTF-8')
+		bytes = value.to_bytes(fieldSize, byteorder='big') + b'\x00' + record.encode('UTF-8')
 		return cls(size, fieldSize, bytes)
 	
 	def getHashValue(self):

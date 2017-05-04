@@ -2,13 +2,14 @@ from Record import *
 
 class ExtendibleBlock:
 
-	def __init__(self, size, recordSize, fieldSize, bfr, data):
+	def __init__(self, size, recordSize, fieldSize, bfr, depthSize, data):
 		self.size = size
 		# size of entire record (including hashing field)
 		self.recordSize = recordSize
 		self.fieldSize = fieldSize
 		self.bfr = bfr
 		self.data = data
+		self.depthSize = depthSize
 		self.localDepth = 0
 
 	def hasSpace(self):
@@ -25,8 +26,8 @@ class ExtendibleBlock:
 		return Record(self.recordSize, self.fieldSize, data)
 
 	# return pointer value
-	def getPointer(self):
-		return int.from_bytes(self.data[(-1*self.pointerSize):], byteorder='big')
+	def getLocalDepth(self):
+		return int.from_bytes(self.data[(-1*self.depthSize):], byteorder='big')
 
 	def isEmpty(self):
 		for recNum in range(0, self.bfr):

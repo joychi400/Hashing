@@ -2,9 +2,10 @@ from ExtendibleHashedFile import *
 
 file = ExtendibleHashedFile(256, 100, 10, 'test1')
 
-hashValue=input('Enter a hash value: ')
+while True:
+	hashValue=input('Enter a hash value: ')
 
-file.insert(int(hashValue), "this is a record")
+	file.insert(int(hashValue), "this is a record")
 
 # for i in range(50, 90):
 	# file.insert(i, str(i) + "th record")
