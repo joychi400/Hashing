@@ -2,16 +2,22 @@ from ExtendibleHashedFile import *
 
 file = ExtendibleHashedFile(256, 100, 10, 'test1')
 
-while True:
-	hashValue=input('Enter a hash value: ')
+# while True:
+	# hashValue=input('Enter a hash value: ')
 
-	file.insert(int(hashValue), "this is a record")
+	# file.insert(int(hashValue), "this is a record")
 
-# for i in range(50, 90):
-	# file.insert(i, str(i) + "th record")
-	# if file.search(i) == None:
-		# print("Record " + str(i) + " was not inserted")
-
+i=0
+while i < 7000:
+	file.insert(i, str(i) + "test flippin value")
+	file.search(i)
+	i+=500
+#file.update(500, "updated val")
+#file.search(500)
+#file.delete(500)
+#file.search(500)
+file.undelete(500)
+file.search(500)
 # for i in range(60, 70):
 	# file.update(i, str(i) + "th UPDATED record")
 

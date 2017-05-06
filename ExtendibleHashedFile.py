@@ -21,21 +21,28 @@ class ExtendibleHashedFile:
 	
 		# truncates the file
 		with open(self.file, 'wb') as f:
-			f.write(b"""This is a file header
-			here is some information
-			this is only two blocks in size at maximum""")
-		# create overflow file
-		open(self.file + '_overflow', 'wb').close()
+			f.write(b"some heagfho[iserjiodfgfg")
+			f.seek(self.blockSize*2)
+			f.write(bytearray(self.blockSize))
+			# set local depth to 0
+			f.seek(self.blockSize*3 - self.depthSize)
+			# update local depth value
+			f.write((0).to_bytes(self.depthSize, byteorder='big'))
+		
 	
 	def h1(self, value):
 		return value % 32
 		
 	def getBinary(self, value):
-		return "{0:b}".format(value)
+		binary = "{0:b}".format(value)
+		while len(binary) < 5:
+			binary = "0" + binary
+		return binary
 		
-	def getRightmostBits(self, value, count):
+	def getLeftmostBits(self, value, count):
 		if count>0:
-			return value[-1*count:]
+			print("Val: " + str(self.h1(value)) + " Count: " + str(count) + " LMB: " + self.getBinary(self.h1(value))[:count])
+			return self.getBinary(self.h1(value))[:count]
 		else:
 			return ""
 		
@@ -43,160 +50,207 @@ class ExtendibleHashedFile:
 	def insert(self, value, record):
 		#using the hash function
 		bucket = self.getBucketPointer(value)
+		print("Bucket: " + str(bucket))
 		#format the record to be inserted
 		formattedRecord = Record.new(self.recordSize, self.fieldSize, value, record)
 		#open the file as binary read and write
 		with open(self.file, 'r+b', buffering=self.blockSize) as f:
 			#navigate to the appropriate bucket
 			#plus 2 is to account for the header
-			f.seek(self.blockSize*(bucket + 2))
+			f.seek(self.blockSize*(bucket))
 			#check to see if data exits in this bucket
 			theBlock = self.makeBlock(f.read(self.blockSize))
 			space = theBlock.hasSpace()
 			if space>=0:
 				# spot was open, move pointer back
-				f.seek(self.blockSize*(bucket+2) + self.recordSize*space)
-				#slot data in there 
+				f.seek(self.blockSize*(bucket) + self.recordSize*space)
+				#slot data in there boiiiiii
 				f.write(formattedRecord.bytes)
 			
 			else:
-				# If there's collision split bucket
-				if theBlock.localDepth == self.globalDepth:
-					newDirectory = {}
-					if len(self.Directory.keys()) == 1:
-						newDirectory["0"] = self.Directory[""]
-						newDirectory["1"] = self.nextAvailableBucket
-					else:
-						for entry in self.Directory.keys():
-							str1 = entry + "0"
-							str2 = entry + "1"
-							newDirectory[str1] = self.Directory[entry]
-							newDirectory[str2] = self.Directory[entry]
-					self.globalDepth += 1
-					self.Directory = newDirectory
-				print(self.Directory)
-				#if theBlock.localDepth < self.globalDepth:
-				
-				allRecords = theBlock.getAllRecords()
-				origBucketCount = 0
-				grabbedBucketCount = 0
-				
-				curr = "0" + self.getRightmostBits(self.getBinary(self.h1(value)), self.globalDepth)
-				next = "1" + self.getRightmostBits(self.getBinary(self.h1(value)), self.globalDepth)
-				for record in allRecords:
-				    #use the rightmost significant bits to determine which bucket
-					whichBucket  = self.getBucketPointer(record.getHashValue())
-					if whichBucket == curr:
-						origBucketCount +=1
-						if origBucketCount > self.bfr:
-							print("theres need to be a split")
-						else:
-							f.seek(self.blockSize*(whichBucket+2) + self.recordSize*(origBucketCount - 1))
-							f.write(record.bytes)
-					if whichBucket == next:
-						grabbedBucketCount += 1
-						if grabbedBucketCount > self.bfr:
-							print("there's need to split")	
-						else:
-							f.seek(self.blockSize*(whichBucket+2) + self.recordSize*(grabbedBucketCount - 1))
-							f.write(record.bytes)
-				
-				self.nextAvailableBucket += 1
-				theBlock.localDepth += 1
-				
-	def getBucketPointer(self, value):
-		hashedValue = self.h1(value)
-		print("Hashed Value: ", str(hashedValue))
-		binary = self.getBinary(hashedValue)
-		print("Binary: ", str(binary))
-		rightmost = self.getRightmostBits(binary, self.globalDepth)
-		print("Rightmost: ", str(rightmost))
-		return self.Directory[rightmost]
-
-	def search(self, value):
-		#pass value to hash function
-		bucket = self.h1(value)
-		#open the file as binary read and write 
-		with open(self.file, 'rb', buffering=self.blockSize) as f:
-			# navigate to the appropriate bucket
-			# plus 2 is to account for the header
-			f.seek(self.blockSize*(bucket+2))
-			# load bucket into memory
-			theBlock = self.makeBlock(f.read(self.blockSize))	
-			# currently only built to handle key values
-			if theBlock.containsRecordWithValue(value):	
-				theRecord = theBlock.getRecordWithValue(value)	
-				print(theRecord.bytes)
+				self.split(f, theBlock, formattedRecord, value)
+	
+	def split(self, mainFile, theBlock, theRecord, value):
+		# If there's collision split bucket
+		if theBlock.getLocalDepth() == self.globalDepth:
+			newDirectory = {}
+			for entry in self.Directory.keys():
+				str1 = entry + "0"
+				str2 = entry + "1"
+				newDirectory[str1] = self.Directory[entry]
+				newDirectory[str2] = self.Directory[entry]
+			self.globalDepth += 1
+			self.Directory = newDirectory
+		print(self.Directory)
+	
+		allRecords = theBlock.getAllRecords()
+		if not (theRecord is None):
+			allRecords.append(theRecord)
+		
+		orig=[]
+		new=[]
+		needsAnotherSplit = False
+		curr = self.getLeftmostBits(value, theBlock.getLocalDepth()) + "0"
+		next = self.getLeftmostBits(value, theBlock.getLocalDepth()) + "1"
+		self.Directory[self.padVal(next)] = self.nextAvailableBucket
+		for record in allRecords:
+			#use the leftmost significant bits to determine which bucket
+			whichBucket = self.getLeftmostBits(record.getHashValue(), theBlock.getLocalDepth() + 1)
+			if whichBucket == curr:
+				orig.append(record)
+			if whichBucket == next:
+				new.append(record)
+		
+		#to put records in thier appropraite bucket after hash functions
+		count=0
+		for record in orig:
+			count+=1
+			if count <= self.bfr:
+				mainFile.seek(self.blockSize*(self.Directory[self.padVal(curr)]) + self.recordSize*(count - 1))
+				mainFile.write(record.bytes)
 			else:
-				pointer = theBlock.getPointer() - 1
-				#with open(self.overflow, 'rb' buffering=self.blockSize) as overflow:
-				with open(self.Directory, 'rb', buffering=self.blockSize) as overflow:
-					overflow.seek(self.blockSize*pointer)
-					self.makeBlock(overflow.read(self.blockSize))
-			print(theRecord.bytes)
+				print("overflow while splitting")
+				needAnotherSplit=True
+				
+		count=0
+		for record in new:
+			count+=1
+			if count <= self.bfr:
+				mainFile.seek(self.blockSize*(self.Directory[self.padVal(next)]) + self.recordSize*(count - 1))
+				mainFile.write(record.bytes)
+			else:
+				print("overflow while splitting")
+				needAnotherSplit=True
+		
+		self.nextAvailableBucket += 1
+		newLocalDepth = theBlock.getLocalDepth() + 1
+		mainFile.seek(self.blockSize*(self.Directory[self.padVal(curr)] + 1) - self.depthSize)
+		mainFile.write(newLocalDepth.to_bytes(self.depthSize, byteorder='big'))
+		mainFile.seek(self.blockSize*(self.Directory[self.padVal(next)] + 1) - self.depthSize)
+		mainFile.write(newLocalDepth.to_bytes(self.depthSize, byteorder='big'))
+		
+		print(self.Directory)
+		
+		if needsAnotherSplit:
+			if len(orig) > len(new):
+				value = curr
+				aRecord = orig[len(orig)-1]
+				mainFile.seek(self.blockSize*(self.Directory[self.padVal(curr)]))
+				theBlock = self.makeBlock(mainFile.read(self.blockSize))
+			else:
+				value = next
+				aRecord = new[len(new)-1]
+				mainFile.seek(self.blockSize*(self.Directory[self.padVal(next)]))
+				theBlock = self.makeBlock(mainFile.read(self.blockSize))
+			self.split(f, theBlock, aRecord, value)
+	
+	def padVal(self, val):
+		while len(val) < self.globalDepth:
+			val = val + "0"
+		return val
+	
+	def getBucketPointer(self, value):
+		leftmost = self.getLeftmostBits(value, self.globalDepth)
+		return self.Directory[self.padVal(leftmost)]
+		
+	def utilSearch(self, value, loc, searchDeleted):	
+		bucket =self.getBucketPointer(value)
+		#open the file as binary read
+		with open(self.file, 'r+b', buffering=self.blockSize) as f:
+			#navigate to the appropraite bucket
+			f.seek(self.blockSize*(bucket))
+			#load bucket into memory
+			theBlock = self.makeBlock(f.read(self.blockSize))
+			# currently only built to handle key values
+			if searchDeleted and theBlock.containsRecordWithValueInclDeleted(value):
+				if loc:
+					blockLoc = bucket
+					recordLoc = theBlock.getRecordWithValueLocInclDeleted(value)
+					return {"blockLoc": blockLoc, "recordLoc": recordLoc}
+				else:
+					return theBlock.getRecordWithValueInclDeleted(value)
+			elif (not searchDeleted) and theBlock.containsRecordWithValue(value):
+				# load the record
+				if loc:
+					blockLoc = bucket
+					recordLoc = theBlock.getRecordWithValueLoc(value)
+					return {"blockLoc": blockLoc, "recordLoc": recordLoc}
+				else:
+					return theBlock.getRecordWithValue(value)
+			else:
+					print("Record not found")
+		
+
+	# def search(self, value):
+		# #go to bucket
+		# bucket = self.getBucketPointer(value)
+		# with open(self.file, 'r+b', buffering=self.blockSize) as f:
+			# #to find the file
+			# f.seek(self.blockSize*(bucket))
+			# #read the file
+			# theBlock = self.makeBlock(f.read(self.blockSize))
+			# #to check if the value is in the record
+			# if theBlock.containsRecordWithValue(value):
+				# theBlock.getRecordWithValue(value).prettyPrint()
+			# else:
+				# print('not found')
+		
+		# #seek the file
+		
+	def search(self, value):
+		theRecord = self.utilSearch(value, False, False)
+		if not (theRecord is None):
+			theRecord.prettyPrint()
 
 	def update(self, value, data):
-         # pass value to hash function
-		bucket = self.h1(value)
-		# format the record to overwrite with
-		formattedRecord = Record.new(self.recordSize, self.fieldSize, value, data)	
+        #format record
+		formattedRecord = Record.new(self.recordSize, self.fieldSize, value, data)
+		
+		bucket = self.getBucketPointer(value)
+		
 		# open the file as binary read and write
 		with open(self.file, 'r+b', buffering=self.blockSize) as f:
 			# navigate to the appropriate bucket
 			# plus 2 is to account for the header
-			f.seek(self.blockSize*(bucket+2))
+			f.seek(self.blockSize*(bucket))
 			# load bucket into memory
 			theBlock = self.makeBlock(f.read(self.blockSize))
-			# currently only built to handle key values	
-			recLoc = theBlock.getRecordWithValueLoc(value)
-			# navigate to the record to be updated
-			f.seek(self.blockSize*(bucket+2) + self.recordSize*recLoc)
-			# write over the old record with new formatted one
-			f.write(formattedRecord.bytes)
+			if theBlock.containsRecordWithValue(value):
+				recLoc = theBlock.getRecordWithValueLoc(value)
+				f.seek(self.blockSize*bucket + self.recordSize*recLoc)
+				f.write(formattedRecord.bytes)
 			
-	 
+	def delete(self, value):
+		recordInfo = self.utilSearch(value, True, False)
+		with open(self.file, 'r+b', buffering=self.blockSize) as f:
+			# navigate to the record to be updated
+			f.seek(self.blockSize*(recordInfo["blockLoc"]) + self.recordSize*recordInfo["recordLoc"] + self.fieldSize)
+			# set the deletion bit to 1
+			f.write(b'\x01')
+			
+	def undelete(self, value):
+		recordInfo = self.utilSearch(value, True, True)
+		with open(self.file, 'r+b', buffering=self.blockSize) as f:
+			# navigate to the record to be updated
+			f.seek(self.blockSize*(recordInfo["blockLoc"]) + self.recordSize*recordInfo["recordLoc"] + self.fieldSize)
+			# set the deletion bit to 0
+			f.write(b'\x00')
 
-    #def readBlock(self, blockNum):
-        #with open(self.file, 'rb', buffering=self.blockSize) as f:
-           # f.seek(self.blockSize*(blockNum+2))
-            #return self.makeBlock(f.read(self.blockSize))
-
-    # TODO: It would be cleaner (and reduce disk accesses) to simply append
-    #       records directly to a Block, and then have a single
-    #       Block.write method that will write the block back
-    #       to disk in a single write operation and only when needed.
-   # def appendBlock(self, blockNum, record):
-       # with open(self.file, 'r+b', buffering=self.blockSize) as f:
-           # f.seek(self.blockSize*(blockNum+2))
-            #theBlock = self.makeBlock(f.read(self.blockSize))
-
-            # If record is already in the block, don't re-insert it
-            #if theBlock.containsRecordWithValue(record.getHashValue()):
-			#return True
-
-            # Otherwise check for a free slot and use it if there is one
-           # space = theBlock.hasSpace();
-           # if space>=0:
-                ## spot was open, move pointer back
-               # f.seek(self.blockSize*(blockNum+2) + self.recordSize*space)
-                # slot data in there boiii
-               # f.write(record.bytes)
-
-               # return True
-            #else:
-                # there has been a collision. handle it.
-               # return False
-
-    # TODO: Instead of clearing the block with a separate method
-    #       it would be nicer to have a "deleted" field on the Record class
-    #       so the Record's could be marked for deletion, and written to
-    #       disk in a single Block.write call or similar.
-   # def clearBlock(self, blockNum):
-       # with open(self.file, 'r+b', buffering=self.blockSize) as f:
-            #emptyRecord = Record.new(self.recordSize, self.fieldSize, 0, "DELETED")
-            #for i in range(0, self.bfr):
-                #f.seek(self.blockSize*(blockNum+2) + self.recordSize*i)
-                #f.write(emptyRecord.bytes)
-
+	def displayHeader(self):
+		print("header")
+	
+	def displayBlock(self, bucket):
+		with open(self.file, 'r+b', buffering=self.blockSize) as f:
+			#navigate to the bucket
+			f.seek(self.blockSize*(bucket))
+			#load bucket into memeory
+			theBlock = self.makeBlock(f.read(self.blockSize))
+			#dictionary with record loaction and record objects
+			records = theBlockgetAllRecordsWithLoc()
+			#line number of the number for the bucket
+			tabSize = 5
+		
+	
+	
 	def makeBlock(self, data):
 		return ExtendibleBlock(self.blockSize, self.recordSize, self.fieldSize, self.bfr, self.depthSize, data)
