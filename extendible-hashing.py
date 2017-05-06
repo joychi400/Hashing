@@ -2,10 +2,11 @@ from ExtendibleHashedFile import *
 
 file = ExtendibleHashedFile(256, 100, 10, 'test1')
 
-# while True:
-	# hashValue=input('Enter a hash value: ')
+while True:
+	hashValue=input('Enter a hash value: ')
 
-	# file.insert(int(hashValue), "this is a record")
+	file.insert(int(hashValue), "this is a record")
+	
 
 i=0
 while i < 7000:
@@ -14,10 +15,11 @@ while i < 7000:
 	i+=500
 #file.update(500, "updated val")
 #file.search(500)
-#file.delete(500)
+#file.displayBlock(2)
+file.delete(500)
 #file.search(500)
-file.undelete(500)
-file.search(500)
+#file.undelete(500)
+#file.search(500)
 # for i in range(60, 70):
 	# file.update(i, str(i) + "th UPDATED record")
 

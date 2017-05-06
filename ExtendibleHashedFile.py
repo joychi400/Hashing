@@ -28,7 +28,27 @@ class ExtendibleHashedFile:
 			f.seek(self.blockSize*3 - self.depthSize)
 			# update local depth value
 			f.write((0).to_bytes(self.depthSize, byteorder='big'))
-		
+	
+	def writeFirstHeaderBlock(self):
+		with open(self.file, 'r+b') as f:
+			f.seek(0)
+			f.write(bytearray(self.blockSize))
+			f.seek(0)
+			f.write(self.n.to_bytes(3, byteorder='big'))
+			f.write(self.m.to_bytes(3, byteorder='big'))
+			f.write(self.blockSize.to_bytes(3, byteorder='big'))
+			f.write(self.recordSize.to_bytes(3, byteorder='big'))
+			f.write(self.fieldSize.to_bytes(3, byteorder='big'))
+			
+	def writeSecondHeaderBlock(self):
+		with open(self.file, 'r+b') as f:
+			f.seek(self.blockSize)
+			f.write(bytearray(self.blockSize))
+			f.seek(self.blockSize)
+			f.write(self.numRecords.to_bytes(6, byteorder='big'))
+			f.write(self.numRecordsDeleted.to_bytes(3, byteorder='big'))
+			f.write(self.bfr.to_bytes(1, byteorder='big'))
+			f.write(self.numRecords.to_bytes(6, byteorder='big'))
 	
 	def h1(self, value):
 		return value % 32
@@ -38,7 +58,7 @@ class ExtendibleHashedFile:
 		while len(binary) < 5:
 			binary = "0" + binary
 		return binary
-		
+			
 	def getLeftmostBits(self, value, count):
 		if count>0:
 			print("Val: " + str(self.h1(value)) + " Count: " + str(count) + " LMB: " + self.getBinary(self.h1(value))[:count])
@@ -46,7 +66,6 @@ class ExtendibleHashedFile:
 		else:
 			return ""
 		
-
 	def insert(self, value, record):
 		#using the hash function
 		bucket = self.getBucketPointer(value)
@@ -151,6 +170,7 @@ class ExtendibleHashedFile:
 	
 	def getBucketPointer(self, value):
 		leftmost = self.getLeftmostBits(value, self.globalDepth)
+		print(leftmost)
 		return self.Directory[self.padVal(leftmost)]
 		
 	def utilSearch(self, value, loc, searchDeleted):	
@@ -181,21 +201,6 @@ class ExtendibleHashedFile:
 					print("Record not found")
 		
 
-	# def search(self, value):
-		# #go to bucket
-		# bucket = self.getBucketPointer(value)
-		# with open(self.file, 'r+b', buffering=self.blockSize) as f:
-			# #to find the file
-			# f.seek(self.blockSize*(bucket))
-			# #read the file
-			# theBlock = self.makeBlock(f.read(self.blockSize))
-			# #to check if the value is in the record
-			# if theBlock.containsRecordWithValue(value):
-				# theBlock.getRecordWithValue(value).prettyPrint()
-			# else:
-				# print('not found')
-		
-		# #seek the file
 		
 	def search(self, value):
 		theRecord = self.utilSearch(value, False, False)
@@ -237,7 +242,16 @@ class ExtendibleHashedFile:
 			f.write(b'\x00')
 
 	def displayHeader(self):
-		print("header")
+		print()
+		print("globalDepth")
+		print("Bucket: ")
+		print("Block size: ")
+		print("Record size: ")
+		print("Field size: " )
+		print("Number of records:")
+		print("Number of records deleted:")
+		print("BFR: ")
+		print("Distinct values: ")
 	
 	def displayBlock(self, bucket):
 		with open(self.file, 'r+b', buffering=self.blockSize) as f:
@@ -246,11 +260,47 @@ class ExtendibleHashedFile:
 			#load bucket into memeory
 			theBlock = self.makeBlock(f.read(self.blockSize))
 			#dictionary with record loaction and record objects
-			records = theBlockgetAllRecordsWithLoc()
-			#line number of the number for the bucket
+			records = theBlock.getAllRecordsWithLoc()
+			# line number of the number for the bucket (centered)
+			labelLoc = self.bfr + 1
+			# counter for lines written, will be used to insert labelLoc at right time
+			linesWritten = 0
 			tabSize = 5
-		
+			blockLabel = bucket
+			
+			# loop through all possible locations
+			for i in range(0, self.bfr):
+				self.printTabOrBucketNum(tabSize, linesWritten, labelLoc, bucket, blockLabel)
+				print("-" * (1 + self.recordSize + 1))
+				linesWritten+=1
+				if i in records.keys():
+					value = records[i].getHashValue()
+					data = records[i].getData().decode()
+					self.printTabOrBucketNum(tabSize, linesWritten, labelLoc, bucket, blockLabel)
+					print("|" + str(value) + " "*(self.fieldSize-len(str(value))) + "|" + data + " "*(self.recordSize-(self.fieldSize + len(data) + 1)) + "|")
+					linesWritten+=1
+				else:
+					self.printTabOrBucketNum(tabSize, linesWritten, labelLoc, bucket, blockLabel)
+					print("|" + " "*(self.fieldSize) + "|" + " "*(self.recordSize-(self.fieldSize + 1)) + "|")
+					linesWritten+=1
+		print(" "*tabSize + "-" * (1 + self.recordSize + 1))
 	
+	def printTabOrBucketNum(self, tabSize, linesWritten, labelLoc, bucket, blockLabel):
+		if(linesWritten == labelLoc - 1):
+			print(" "*math.ceil((tabSize-len(str(blockLabel)))/2) + str(blockLabel) + " "*math.floor((tabSize-len(str(blockLabel)))/2), end="")
+		else:
+			print(" "*tabSize, end="")	
+	
+	def display(self, withHeader):
+		if withHeader:
+			self.displayHeader()
+		with open(self.file, 'r+b', buffering=self.blockSize) as f:
+			f.seek(0, 2)
+			numBytes = f.tell()
+		numBlocks = math.ceil(numBytes/self.blockSize)
+		for bucket in range(0, numBlocks-2):
+			self.displayBlock(True, bucket)
+			
 	
 	def makeBlock(self, data):
 		return ExtendibleBlock(self.blockSize, self.recordSize, self.fieldSize, self.bfr, self.depthSize, data)
